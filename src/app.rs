@@ -1,10 +1,10 @@
-use crate::api::print;
+use crate::api::{print, list_printers};
 use actix_web::web::{self, scope};
 use ipp::prelude::*;
 use std::collections::HashMap;
 
 pub fn configure_app(cfg: &mut web::ServiceConfig) {
-    cfg.service(scope("/api").service(print));
+    cfg.service(scope("/api").service(list_printers).service(print));
 }
 
 pub struct AppState {

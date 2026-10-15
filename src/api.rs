@@ -3,6 +3,7 @@ use crate::auth::AuthenticatedUser;
 use actix_web::{
     error::ErrorNotFound,
     error::PayloadError,
+    get,
     http::StatusCode,
     post,
     web::{Data, Json, Path, Payload, Query},
@@ -110,6 +111,13 @@ fn parse_range(range: &str) -> Result<(i32, i32), ParseRangeError> {
     let (start, end) = range.split_once('-').unwrap_or((range, range));
     log::debug!("Parsing a range between {start:?} and {end:?}");
     Ok((parse_one_in_range(start)?, parse_one_in_range(end)?))
+}
+
+#[get("/printers")]
+pub async fn list_printers(app_data: Data<AppState>, _user: AuthenticatedUser) -> Json<Vec<String>> {
+    let mut names = app_data.printers.keys().cloned().collect::<Vec<_>>();
+    names.sort();
+    Json(names)
 }
 
 #[post("/printers/{printer}/print")]
