@@ -148,7 +148,7 @@ pub async fn print(
             .filter(|entry| {
                 entry
                     .as_ref()
-                    .map(|(start, end)| end > start)
+                    .map(|(start, end)| end >= start)
                     .unwrap_or(true)
             })
             .collect::<Result<Vec<(i32, i32)>, ParseRangeError>>()?
@@ -161,7 +161,7 @@ pub async fn print(
         .coalesce(|(prev_start, prev_end), (this_start, this_end)| {
             if prev_end >= this_start {
                 // Merge the two ranges if they have overlap
-                Ok((prev_start, this_end))
+                Ok((prev_start, prev_end.max(this_end)))
             } else {
                 Err(((prev_start, prev_end), (this_start, this_end)))
             }
