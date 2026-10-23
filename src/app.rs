@@ -1,14 +1,21 @@
-use crate::api::{print, list_printers};
-use actix_web::web::{self, scope};
+use crate::api::{print, list_printers, printer_status};
+use actix_web::web;
 use ipp::prelude::*;
 use std::collections::HashMap;
 
 pub fn configure_app(cfg: &mut web::ServiceConfig) {
-    cfg.service(scope("/api").service(list_printers).service(print));
+    cfg.service(
+        web::scope("/api")
+            .service(list_printers)
+            .service(print)
+            .service(printer_status),
+    );
 }
 
 pub struct AppState {
     pub printers: HashMap<String, AsyncIppClient>,
+    pub dumont_endpoint: String,
+    pub dumont_token: String,
 }
 
 pub async fn get_app_data() -> anyhow::Result<AppState> {
@@ -33,5 +40,16 @@ pub async fn get_app_data() -> anyhow::Result<AppState> {
         })
         .collect::<anyhow::Result<HashMap<String, AsyncIppClient>>>()?;
 
-    Ok(AppState { printers })
+    let dumont_endpoint = std::env::var("DUMONT_ENDPOINT")
+        .expect("No DUMONT_ENDPOINT")
+        .to_string();
+    let dumont_token = std::env::var("DUMONT_TOKEN")
+        .expect("No DUMONT_TOKEN")
+        .to_string();
+
+    Ok(AppState {
+        printers,
+        dumont_endpoint,
+        dumont_token,
+    })
 }

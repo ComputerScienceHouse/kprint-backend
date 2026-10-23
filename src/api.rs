@@ -8,6 +8,7 @@ use actix_web::{
     post,
     web::{Data, Json, Path, Payload, Query},
     HttpResponse, Responder, ResponseError,
+    error::ErrorServiceUnavailable,
 };
 use futures::{StreamExt, TryStreamExt};
 use ipp::prelude::*;
@@ -32,6 +33,13 @@ struct SuccessReply {
 pub struct ParseRangeError {
     error: ParseIntError,
     bad_range: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct PrinterStatus {
+    printer: String,
+    reasons: Vec<String>,
+    has_error: bool,
 }
 
 impl Display for ParseRangeError {
@@ -114,7 +122,10 @@ fn parse_range(range: &str) -> Result<(i32, i32), ParseRangeError> {
 }
 
 #[get("/printers")]
-pub async fn list_printers(app_data: Data<AppState>, _user: AuthenticatedUser) -> Json<Vec<String>> {
+pub async fn list_printers(
+    app_data: Data<AppState>,
+    _user: AuthenticatedUser,
+) -> Json<Vec<String>> {
     let mut names = app_data.printers.keys().cloned().collect::<Vec<_>>();
     names.sort();
     Json(names)
@@ -132,6 +143,15 @@ pub async fn print(
         "Got a print request from {}",
         user.claims.preferred_username().unwrap().as_str()
     );
+
+    let statuses = dumont_status(&app_data).await?;
+    if statuses
+        .iter()
+        .any(|s| s.has_error && s.printer.starts_with(&printer.to_lowercase()))
+    {
+        return Err(ErrorServiceUnavailable("Printer has an error!").into());
+    }
+
     let printer = match app_data.printers.get(&*printer) {
         Some(printer) => printer,
         None => {
@@ -251,4 +271,24 @@ pub async fn print(
         job_link,
         job_id,
     }))
+}
+
+async fn dumont_status(app_data: &AppState) -> anyhow::Result<Vec<PrinterStatus>> {
+    Ok(reqwest::Client::new()
+        .get(format!("{}/api/printer_status", app_data.dumont_endpoint))
+        .header("Authorization", &app_data.dumont_token)
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?)
+}
+
+#[get("/printers/status")]
+pub async fn printer_status(
+    app_data: Data<AppState>,
+    _user: AuthenticatedUser,
+) -> Result<Json<Vec<PrinterStatus>>, KprintError> {
+    Ok(Json(dumont_status(&app_data).await?))
 }
